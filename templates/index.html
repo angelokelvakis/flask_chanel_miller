@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Passage Generator</title>
+    <style>
+        body {
+            background-color: #FFC0CB; /* Nice pink background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            text-align: center;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+        .passage-box {
+            background-color: #000;
+            color: #fff;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            max-width: 600px;
+            max-height: 200px;
+            overflow-y: auto; /* Scroll if content exceeds the box */
+            text-align: left;
+        }
+        .buttons {
+            margin-top: 20px;
+        }
+        .buttons button {
+            font-size: 18px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .submit-button {
+            background-color: #77DD77; /* Pastel green */
+            color: #000;
+        }
+        .generate-button {
+            background-color: #89CFF0; /* Nice blue */
+            color: #000;
+        }
+        input[type="radio"] {
+            margin: 10px 0;
+        }
+        input[type="text"] {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            width: 100%;
+        }
+        .help-button {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: #FFA07A;
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            color: #fff;
+        }
+        .popup {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            text-align: center;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .popup-content {
+            background-color: #333;
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 80%;
+            margin: auto;
+        }
+        .popup .close-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: transparent;
+            border: none;
+            font-size: 30px;
+            color: #fff;
+            cursor: pointer;
+        }
+        .score-box {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if not session.username %}
+            <h1>Enter Your Username</h1>
+            <form action="/" method="post">
+                <input type="text" name="username" placeholder="Enter your username" required><br>
+                <button type="submit" class="generate-button">Start</button>
+            </form>
+
+        {% else %}
+            <h1>Random Passage</h1>
+            {% if passage %}
+                <div class="passage-box">
+                    <p>{{ passage }}</p>
+                    <p><strong>ID:</strong> {{ passage_id }}</p>
+                </div>
+
+                <form action="/submit" method="post">
+                    <input type="hidden" name="passage_id" value="{{ passage_id }}">
+                    <input type="hidden" name="username" value="{{ username }}">
+                <label><input type="radio" name="category" value="1" required> Consent</label><br>
+                <label><input type="radio" name="category" value="2"> No Consent</label><br>
+                <label><input type="radio" name="category" value="3"> Unsure</label><br>
+                <label><input type="radio" name="category" value="4"> No Sex</label><br>
+                    <div class="buttons">
+                        <button type="submit" class="submit-button">Submit</button>
+                    </div>
+                </form>
+
+                <form action="/new_passage" method="get">
+                <div class="buttons">
+                    <button type="submit" class="generate-button">Skip</button>
+                </div>
+                </form>
+            {% endif %}
+
+            <div class="score-box">
+                <strong>Your Score:</strong> {{ score }}
+            </div>
+
+            <button class="help-button" onclick="showPopup()">?</button>
+
+        {% endif %}
+    </div>
+
+    <div id="popup" class="popup">
+        <div class="popup-content">
+            <button class="close-button" onclick="closePopup()">×</button>
+            <h2>Sexual Consent Classification</h2>
+            <p>This site is used for classifying passages from books. The goal is to classify
+            the text as either sexual or not sexual, and if it contains consent or not. The goal
+            is to identify when a sexual situation may contain rape or sexual assault / harassment,
+            and when it contains two or more consenting people.</p>
+            <h3>When to select: 'Consent'</h3>
+            <p>You should select this option if all parties seem to enjoy the actions described, and
+            it is clear that consent was given.</p>
+            <h3>When to select: 'No Consent'</h3>
+            <p>You should select this option if at least one party is either objecting to the actions,
+            having negative internal thoughts that allude to them wanting it to stop, or the power dynamic
+            does not allow them to reject the actions.</p>
+            <h3>When to select: 'Unsure'</h3>
+            <p>You should select this option if the scene is indeed sexual, but the consent is too ambiguous
+            for you to decide whether consent has been given.</p>
+            <h3>When to select: 'Not Sex'</h3>
+            <p>You should select this option if the text is not a sexual or romantic situation. This could include
+            them referencing a sexual situation in the past without great detail, or simply a non-sexual
+            scene is happening.</p>
+        </div>
+    </div>
+
+    <script>
+        function showPopup() {
+            document.getElementById('popup').style.display = 'flex';
+        }
+
+        function closePopup() {
+            document.getElementById('popup').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
