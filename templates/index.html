@@ -119,7 +119,7 @@
 </head>
 <body>
     <div class="container">
-        {% if not session.username %}
+        {% if not session.get('username') %}
             <h1>Enter Your Username</h1>
             <form action="/" method="post">
                 <input type="text" name="username" placeholder="Enter your username" required><br>
@@ -151,6 +151,8 @@
                     <button type="submit" class="generate-button">Skip</button>
                 </div>
                 </form>
+            {% else %}
+                <p>No passage available at the moment. Please try again later.</p>
             {% endif %}
 
             <div class="score-box">
