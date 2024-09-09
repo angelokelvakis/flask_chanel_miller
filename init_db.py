@@ -12,6 +12,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT,
             passage_id TEXT,
+            original_id TEXT,
             category TEXT,
             timestamp TEXT,
             score INTEGER
@@ -22,6 +23,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS passages (
             passage_id TEXT PRIMARY KEY,
+            original_id TEXT,
             passage TEXT
         )
     ''')

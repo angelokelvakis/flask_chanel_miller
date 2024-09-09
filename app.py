@@ -49,8 +49,8 @@ def load_passages():
         book_df = pd.read_csv('books.csv')
         for _, row in book_df.iterrows():
             cursor.execute(
-                'INSERT INTO passages (passage_id, passage) VALUES (?, ?)',
-                (row['Passage_ID'], row['passage'])
+                'INSERT INTO passages (passage_id, original_id, passage) VALUES (?, ?, ?)',
+                (row['Passage_ID'], row['original_id'], row['passage'])
             )
         conn.commit()
 
@@ -76,15 +76,29 @@ def index():
         # Retrieve the last passage shown from the session, if available
         if 'last_passage_id' in session:
             passage_id = session['last_passage_id']
-            random_passage = query_db('SELECT passage FROM passages WHERE passage_id = ?', [passage_id], one=True)
+            random_passage = query_db('SELECT passage, original_id FROM passages WHERE passage_id = ?', [passage_id], one=True)
             passage = random_passage[0] if random_passage else None
+            original_id = random_passage[1] if random_passage else None
         else:
             # Select a random passage
-            random_passage = query_db('SELECT passage, passage_id FROM passages ORDER BY RANDOM() LIMIT 1', one=True)
-            passage, passage_id = random_passage
+            random_passage = query_db('SELECT passage, passage_id, original_id FROM passages ORDER BY RANDOM() LIMIT 1', one=True)
+            passage, passage_id, original_id = random_passage
             session['last_passage_id'] = passage_id
 
-        return render_template('index.html', passage=passage, passage_id=session['last_passage_id'], username=username, score=score)
+        # Query for total number of passages
+        total_p = query_db('SELECT COUNT(*) FROM passages', one=True)[0]
+        # Query for the number of unique classified passages
+        class_p = query_db('SELECT COUNT(DISTINCT passage_id) FROM submissions', one=True)[0]
+        # Calculate the percentage completion
+        progress = round((int(class_p) / int(total_p)) * 100, 2) if total_p else 0
+
+        return render_template('index.html',
+                               passage=passage,
+                               passage_id=session['last_passage_id'],
+                               original_id=original_id,
+                               username=username,
+                               score=score,
+                               progress=progress)
 
     else:
         # Session error handling
@@ -102,13 +116,25 @@ def new_passage():
     score = user_data[0] if user_data else 0
 
     # Generate a new random passage
-    random_passage = query_db('SELECT passage, passage_id FROM passages ORDER BY RANDOM() LIMIT 1', one=True)
-    passage, passage_id = random_passage
+    random_passage = query_db('SELECT passage, passage_id, original_id FROM passages ORDER BY RANDOM() LIMIT 1', one=True)
+    passage, passage_id, original_id = random_passage
 
     # Store the new passage in the session
     session['last_passage_id'] = passage_id
 
-    return render_template('index.html', passage=passage, passage_id=passage_id, score=score)
+    # Query for total number of passages
+    total_p = query_db('SELECT COUNT(*) FROM passages', one=True)[0]
+    # Query for the number of unique classified passages
+    class_p = query_db('SELECT COUNT(DISTINCT passage_id) FROM submissions', one=True)[0]
+    # Calculate the percentage completion
+    progress = round((int(class_p) / int(total_p)) * 100, 2) if total_p else 0
+
+    return render_template('index.html',
+                           passage=passage,
+                           passage_id=passage_id,
+                           original_id=original_id,
+                           score=score,
+                           progress=progress)
 
 
 @app.route('/submit', methods=['POST'])
@@ -117,6 +143,7 @@ def submit():
     if not username:
         return redirect(url_for('index'))
     passage_id = request.form['passage_id']
+    original_id = request.form['original_id']
     category = request.form['category']
     timestamp = datetime.datetime.now()
 
@@ -132,19 +159,31 @@ def submit():
     # Insert the new submission into the database
     conn = get_db()
     conn.execute(
-        'INSERT INTO submissions (username, passage_id, category, timestamp, score) VALUES (?, ?, ?, ?, ?)',
-        (username, passage_id, category, timestamp, score)
+        'INSERT INTO submissions (username, passage_id, original_id, category, timestamp, score) VALUES (?, ?, ?, ?, ?, ?)',
+        (username, passage_id, original_id, category, timestamp, score)
     )
     conn.commit()
 
     # Select a new random passage
-    random_passage = query_db('SELECT passage, passage_id FROM passages ORDER BY RANDOM() LIMIT 1', one=True)
-    passage, passage_id = random_passage
+    random_passage = query_db('SELECT passage, passage_id, original_id FROM passages ORDER BY RANDOM() LIMIT 1', one=True)
+    passage, passage_id, original_id = random_passage
 
     # Store the new passage in the session
     session['last_passage_id'] = passage_id
 
-    return render_template('index.html', passage=passage, passage_id=passage_id, score=score)
+    # Query for total number of passages
+    total_p = query_db('SELECT COUNT(*) FROM passages', one=True)[0]
+    # Query for the number of unique classified passages
+    class_p = query_db('SELECT COUNT(DISTINCT passage_id) FROM submissions', one=True)[0]
+    # Calculate the percentage completion
+    progress = round((int(class_p) / int(total_p)) * 100, 2) if total_p else 0
+
+    return render_template('index.html',
+                           passage=passage,
+                           passage_id=passage_id,
+                           original_id=original_id,
+                           score=score,
+                           progress=progress)
 
 
 @app.route('/download')
@@ -153,7 +192,7 @@ def download_data():
     submissions = query_db('SELECT * FROM submissions')
 
     # Convert the data into a pandas DataFrame
-    df = pd.DataFrame(submissions, columns=['id', 'username', 'passage_id', 'category', 'timestamp', 'score'])
+    df = pd.DataFrame(submissions, columns=['id', 'username', 'passage_id', 'original_id', 'category', 'timestamp', 'score'])
 
     # Use StringIO to create a file-like object in memory
     output = io.StringIO()

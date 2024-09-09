@@ -88,6 +88,7 @@
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            overflow-y: auto; /* Scroll if content exceeds the box */
         }
         .popup-content {
             background-color: #333;
@@ -136,6 +137,7 @@
 
                 <form action="/submit" method="post">
                     <input type="hidden" name="passage_id" value="{{ passage_id }}">
+                    <input type="hidden" name="original_id" value="{{ original_id }}">
                     <input type="hidden" name="username" value="{{ username }}">
                 <label><input type="radio" name="category" value="1" required> Consent</label><br>
                 <label><input type="radio" name="category" value="2"> No Consent</label><br>
@@ -160,6 +162,8 @@
             </div>
 
             <button class="help-button" onclick="showPopup()">?</button>
+
+            <p>{{ progress }}% classified!</p>
 
         {% endif %}
     </div>
