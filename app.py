@@ -1,58 +1,86 @@
 from flask import Flask, render_template, request, session, g, send_file, redirect, url_for
 import pandas as pd
-import sqlite3
 import datetime
 import io
+import os
+import psycopg2
+from dotenv import load_dotenv
+
+
+# Load environment variables from .env file
+load_dotenv()
+
+# PostgreSQL Database config using environment variables
+POSTGRES_USER = os.getenv('POSTGRES_USER')
+POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
+POSTGRES_DB = os.getenv('POSTGRES_DB')
+POSTGRES_HOST = os.getenv('POSTGRES_HOST')
+POSTGRES_PORT = os.getenv('POSTGRES_PORT')
 
 app = Flask(__name__)
 
 app.secret_key = 'your_secret_key'  # Set a secret key for session management
 
-DATABASE = 'submissions.db'
 
-
-# Utility function to get a connection to the database
+# Utility function to get a connection to the PostgreSQL database
 def get_db():
-    db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = sqlite3.connect(DATABASE)
-    return db
+    if '_database' not in g:
+        g._database = psycopg2.connect(
+            host=POSTGRES_HOST,
+            database=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
+            port=POSTGRES_PORT
+        )
+    return g._database
 
 
 @app.teardown_appcontext
 def close_connection(exception):
-    db = getattr(g, '_database', None)
+    db = g.pop('_database', None)
     if db is not None:
         db.close()
 
 
 # Function to execute a query
 def query_db(query, args=(), one=False):
-    cur = get_db().execute(query, args)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(query, args)
     rv = cur.fetchall()
     cur.close()
+    conn.commit()
     return (rv[0] if rv else None) if one else rv
 
 
-# Load passages into the database from a CSV file if necessary
 @app.before_request
 def load_passages():
     conn = get_db()
     cursor = conn.cursor()
 
-    # Check if passages are already loaded
-    cursor.execute('SELECT COUNT(*) FROM passages')
-    passage_count = cursor.fetchone()[0]
+    try:
+        # Check if passages are already loaded
+        cursor.execute('SELECT COUNT(*) FROM passages')
+        passage_count = cursor.fetchone()[0]
+    except psycopg2.Error as e:
+        # Log the error and return if the table does not exist
+        print(f"Error querying the passages table: {e}")
+        return
 
     if passage_count == 0:
-        import pandas as pd
-        book_df = pd.read_csv('books.csv')
-        for _, row in book_df.iterrows():
-            cursor.execute(
-                'INSERT INTO passages (passage_id, original_id, passage) VALUES (?, ?, ?)',
-                (row['Passage_ID'], row['original_id'], row['passage'])
-            )
-        conn.commit()
+        try:
+            book_df = pd.read_csv('books.csv')
+            for _, row in book_df.iterrows():
+                cursor.execute(
+                    'INSERT INTO passages (passage_id, original_id, passage) VALUES (%s, %s, %s)',
+                    (row['Passage_ID'], row['original_id'], row['passage'])
+                )
+            conn.commit()
+            print(f"Successfully loaded {len(book_df)} passages into the database.")
+        except Exception as e:
+            print(f"Error loading passages from CSV: {e}")
+        finally:
+            cursor.close()  # Make sure to close the cursor after use
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -69,14 +97,14 @@ def index():
 
     if username:
         # Get the user's current score
-        user_data = query_db('SELECT score FROM submissions WHERE username = ? ORDER BY id DESC LIMIT 1',
+        user_data = query_db('SELECT score FROM submissions WHERE username = %s ORDER BY id DESC LIMIT 1',
                              [username], one=True)
         score = user_data[0] if user_data else 0
 
         # Retrieve the last passage shown from the session, if available
         if 'last_passage_id' in session:
             passage_id = session['last_passage_id']
-            random_passage = query_db('SELECT passage, original_id FROM passages WHERE passage_id = ?', [passage_id], one=True)
+            random_passage = query_db('SELECT passage, original_id FROM passages WHERE passage_id = %s', [passage_id], one=True)
             passage = random_passage[0] if random_passage else None
             original_id = random_passage[1] if random_passage else None
         else:
@@ -111,7 +139,7 @@ def new_passage():
     if not username:
         return redirect(url_for('index'))
     # Get the user's current score
-    user_data = query_db('SELECT score FROM submissions WHERE username = ? ORDER BY id DESC LIMIT 1', [username],
+    user_data = query_db('SELECT score FROM submissions WHERE username = %s ORDER BY id DESC LIMIT 1', [username],
                          one=True)
     score = user_data[0] if user_data else 0
 
@@ -148,7 +176,7 @@ def submit():
     timestamp = datetime.datetime.now()
 
     # Get the user's current score
-    user_data = query_db('SELECT score FROM submissions WHERE username = ? ORDER BY id DESC LIMIT 1', [username],
+    user_data = query_db('SELECT score FROM submissions WHERE username = %s ORDER BY id DESC LIMIT 1', [username],
                          one=True)
     score = user_data[0] + 1 if user_data else 1
 
@@ -158,8 +186,10 @@ def submit():
 
     # Insert the new submission into the database
     conn = get_db()
-    conn.execute(
-        'INSERT INTO submissions (username, passage_id, original_id, category, timestamp, score) VALUES (?, ?, ?, ?, ?, ?)',
+    # Create a cursor
+    cur = conn.cursor()
+    cur.execute(
+        'INSERT INTO submissions (username, passage_id, original_id, category, timestamp, score) VALUES (%s, %s, %s, %s, %s, %s)',
         (username, passage_id, original_id, category, timestamp, score)
     )
     conn.commit()
